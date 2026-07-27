@@ -222,7 +222,7 @@ pub fn hc_post(
 ) -> Result<()> {
     KernelLaunch::new(gpu, kernel)
         .grid([num_tokens, 1, 1])
-        .block([256, 1, 1])
+        .block([1024, 1, 1])
         .arg_ptr(block_out)
         .arg_ptr(residual)
         .arg_ptr(post)

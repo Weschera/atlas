@@ -20,6 +20,7 @@
 #include <cuda_bf16.h>
 
 #define HC_BLOCK 256
+#define HC_POST_BLOCK 1024
 #define HC_MAX_MULT 4
 #define HC_MAX_MIX 24 // (2 + HC_MAX_MULT) * HC_MAX_MULT
 
@@ -410,7 +411,8 @@ extern "C" __global__ void hc_pre_finalize(
 // ── hc_post ──
 // out[t,j,d] = post[t,j]*block_out[t,d] + sum_i comb[t,i,j]*residual[t,i,d].
 // `out` may alias `residual` (all hc residual values are read before write).
-// Grid: (T,1,1)  Block: (256,1,1).
+// Grid: (T,1,1)  Block: (1024,1,1). hc_post has no block-wide reduction, so
+// the wider block exposes more of the 4*H pointwise update in parallel.
 extern "C" __global__ void hc_post(
     const __nv_bfloat16* __restrict__ block_out, // [T, H]
     const float* __restrict__ residual,          // [T, hc, H] FP32 highway (mHC)
@@ -431,7 +433,7 @@ extern "C" __global__ void hc_post(
     const float* c = comb + (size_t)t * hc * hc;
     float* o = out + (size_t)t * hc * H;
 
-    for (unsigned int d = tid; d < H; d += HC_BLOCK) {
+    for (unsigned int d = tid; d < H; d += HC_POST_BLOCK) {
         float xd = (float)x[d];
         float rv[HC_MAX_MULT];
         for (unsigned int i = 0; i < hc; ++i) rv[i] = res[i * H + d];
